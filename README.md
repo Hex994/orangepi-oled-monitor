@@ -1,103 +1,99 @@
-# orangepi-oled-monitor
-Orange Pi OLED 系统监控程序安装教程
-一、硬件准备
-​OLED 屏幕​：128x64 或 128x32 的 SSD1306 OLED 屏幕
-​连接方式​：
-SDA → Orange Pi SDA 引脚（GPIO2）
-SCL → Orange Pi SCL 引脚（GPIO3）
-VCC → 3.3V 电源
-GND → GND
-二、系统要求
-​操作系统​：Armbian / Ubuntu 20.04+ / Debian 11+
-​支持的设备​：Orange Pi 全系列 (Zero/Rock/Prime 等)
-三、安装步骤
 
-# 1. 更新系统
-sudo apt update && sudo apt upgrade -y
+OLED System Monitor 安装指南
 
-# 2. 启用I2C接口
-sudo armbian-config
-# 选择 System → Hardware → 启用 i2c0
-# 或手动添加: 
-# echo "dtparam=i2c_arm=on" | sudo tee -a /boot/armbianEnv.txt
+## 硬件要求
+- 支持I2C的OLED屏幕（128x64分辨率推荐）
+- Orange Pi/Raspberry Pi等Linux单板计算机
+- microSD卡（建议8GB以上）
+
+## 软件依赖
+1. Python 3.6+
+2. 必要库：
+   ```bash
+   pip install luma.core luma.oled psutil Pillow
+   ```
+3. 字体文件（需手动下载）：
+   - DejaVuSans.ttf（可从https://www.fontsquirrel.com/fonts/dejavu-sans下载）
+
+## 设备配置
+### 1. I2C接口启用
+```bash
+# Raspberry Pi配置示例
+sudo raspi-config
+# 选择 Interfacing Options -> I2C -> Enable
+
+# Orange Pi配置示例
+sudo nano /etc/modules-load.d/i2c.conf
+# 添加内容：i2c-dev
 sudo reboot
+```
 
-# 3. 安装系统依赖
-sudo apt install -y python3-pip python3-dev i2c-tools libopenjp2-7 libtiff5
+### 2. 权限设置
+```bash
+# 添加用户到i2c组（永久生效）
+sudo usermod -aG i2c $USER
+# 临时权限修复（每次开机需执行）
+echo 'sudo chmod 666 /dev/i2c-0' >> ~/.bashrc
+source ~/.bashrc
+```
 
-# 4. 安装Python库
-sudo pip3 install psutil pillow luma.oled
+## 项目部署
+### 1. 代码获取
+```bash
+git clone https://github.com/Hex994/oled-monitor.git
+cd oled-monitor
+```
 
-# 5. 安装字体
-sudo apt install -y fonts-dejavu
+### 2. 配置文件（可选）
+创建config.py添加自定义配置：
+```python
+# 自定义参数示例
+SCREEN_HEIGHT = 32  # 修改为实际屏幕高度
+FONT_PATH = "/path/to/DejaVuSans.ttf"  # 修改为实际字体路径
+UPDATE_INTERVAL = 5  # 数据更新间隔（秒）
+```
 
-# 6. 克隆代码库
-git clone https://github.com/Hex994/orangepi-oled-monitor.git
-cd orangepi-oled-monitor
+## 运行程序
+```bash
+# 后台运行（推荐）
+nohup python3 main.py >/dev/null 2>&1 &
 
-四、首次运行配置
+# 前台调试
+python3 main.py
+```
 
-# 1. 检查I2C设备是否识别
-sudo i2cdetect -y 0  # 应显示3C地址
+## 故障排查
+1. **屏幕无显示**
+   - 检查I2C连接（使用i2cdetect命令）
+   - 确认屏幕方向正确
+   - 尝试调整屏幕初始化参数
 
-# 2. 修复I2C权限（每次重启后需执行）
-sudo chmod 666 /dev/i2c-0
+2. **数据异常**
+   - 检查网络连接状态
+   - 确认Docker服务已启动（如使用get_docker_count功能）
+   - 查看系统日志：`journalctl -f`
 
-# 3. 启动程序
-python3 oled_monitor.py
+3. **权限问题**
+   ```bash
+   # 检查i2c设备权限
+   ls -l /dev/i2c-*
+   # 应显示类似：crw-rw---- 1 root i2c 89, 0 7月 29 00:48 /dev/i2c-0
+   ```
 
-五、设置开机自启（可选）
+## 扩展功能
+1. 添加自定义监控指标：
+   ```python
+   # 在display_info函数中添加新字段
+   gpu_temp = get_gpu_temperature()  # 自定义函数
+   draw.text((0, line_pos[4]), f"GPU:{gpu_temp}", font=font_small, fill=1)
+   ```
 
-# 1. 创建服务文件
-sudo nano /etc/systemd/system/oled-monitor.service
-
-# 2. 添加以下内容
-[Unit]
-Description=OLED System Monitor
-After=network.target
-
-[Service]
-User=orangepi
-WorkingDirectory=/home/orangepi/orangepi-oled-monitor
-ExecStart=/usr/bin/python3 /home/orangepi/orangepi-oled-monitor/oled_monitor.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-
-# 3. 启用服务
-sudo systemctl daemon-reload
-sudo systemctl enable oled-monitor.service
-sudo systemctl start oled-monitor.service
-
-六、功能说明
-程序启动后：
-
-​显示模式​：每30秒自动切换
-​系统信息屏​：IP地址/CPU温度/内存/网络速度
-​磁盘信息屏​：磁盘用量/运行时间/Docker容器数
-​自动节电​：23:00-7:00 自动关闭屏幕
-​开机动画​：启动时显示"OrangePi"粒子动画
-
-七、常见问题解决
-
-# 1. I2C权限问题
-sudo usermod -aG i2c orangepi
-
-# 2. 缺少luma.oled库
-sudo pip3 install --upgrade luma.oled
-
-# 3. 屏幕不显示
-# 检查接线是否正确，尝试更换I2C地址(0x3C或0x3D)
-nano oled_monitor.py
-# 修改 init_oled() 中的 address=0x3C
-
-# 4. 低分辨率屏幕支持
-# 修改 SCREEN_HEIGHT = 32
-nano oled_monitor.py
-
-八、自定义选项
-
-# 在代码中修改以下变量：
-SCREEN_HEIGHT = 64  # 屏幕高度(32/64)
-SWITCH_INTERVAL = 30  # 屏幕切换间隔(秒)
+2. 实现自动亮度调节：
+   ```python
+   from gpiozero import LightSensor
+   sensor = LightSensor(18)
+   
+   def adjust_brightness():
+       brightness = 0.5 + sensor.value * 0.5
+       device.contrast(int(255 * brightness))
+   ```
